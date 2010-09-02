@@ -43,9 +43,10 @@ class UrlCache(object):
         try:
             t = time.time()
             data = urllib2.urlopen(url, timeout=10).read()
+            print url, 'done', time.time() - t
         except IOError:
             data = None
-        print url, 'done', time.time() - t
+            print url, 'fail', time.time() - t
 
         self.lock.acquire()
         self.update()
@@ -59,7 +60,7 @@ class UrlCache(object):
         while 1:
             try:
                 url = self.queue.get_nowait()
-            except:  # I couldn't work this out (after 30 seconds)
+            except:  # XXX: Work out exception name for "Empty"
                 break
             self.get(url)
 
