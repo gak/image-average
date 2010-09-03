@@ -13,7 +13,7 @@ import urllib2
 from pprint import pprint
 from numpy import *
 from StringIO import StringIO
-from multiprocessing import *
+from multiprocessing import Queue, Process
 import unicodedata
 
 from PIL import Image
@@ -21,7 +21,6 @@ from PIL import Image
 class UrlCache(object):
 
     def __init__(self):
-        self.lock = Lock()
         self.queue = Queue()
         self.validchars = "-_.() %s%s" % (string.ascii_letters, string.digits)
         self.cachepath = 'cache'
@@ -57,6 +56,9 @@ class UrlCache(object):
             self.get(url)
 
     def get_many(self, urls, count):
+
+        urls = set(urls)
+
         for url in urls:
             self.queue.put(url)
         workers = []
@@ -120,14 +122,14 @@ class ImageAverager(object):
 
     def yahoo_search_single(self, query, *args, **kw):
         url = self.get_yahoo_url(query, **kw)
-        data = self.urlcache.get(url, skipcache=0)
+        data = self.urlcache.get(url, skipcache=True)
         response = json.loads(data)
         images = response['ResultSet']['Result']
         for image in images:
             self.images.append(image['Url'])
 
-    def pull_images(self, c):
-        self.urlcache.get_many(self.images, c)
+    def pull_images(self, tasks):
+        self.urlcache.get_many(self.images, tasks)
 
     def create_image(self, output, dims):
         assert(isinstance(dims, (list, tuple)))
@@ -159,7 +161,7 @@ class ImageAverager(object):
             finalimage += imarray
             imagecount += 1
 
-            if 1:
+            if 0:
                 intermediateimage = copy(finalimage)
                 intermediateimage /= imagecount
                 intermediateimage = intermediateimage.astype(uint8)
@@ -173,17 +175,19 @@ class ImageAverager(object):
 
 def main():
     config = json.load(open('config.json'))
-    print config.items()
 
-    # oh snap. convert unicode keys to str
+    # oh snap. convert unicode keys to str, to stop this error:
+    # TypeError: __init__() keywords must be strings
     for key, val in config.items():
         del config[key]
         config[str(key)] = val
 
     ia = ImageAverager(**config)
-    ia.yahoo_search(sys.argv[1], total=200)
-    ia.pull_images(50)
-    ia.create_image('%s.jpg' % sys.argv[1], (300, 300))
+    ia.yahoo_search(sys.argv[1], total=500, adult=True)
+    ia.pull_images(tasks=50)
+    filename = '%s.jpg' % sys.argv[1]
+    ia.create_image(filename, (300, 300))
+    os.system('open "%s"' % filename)
 
 if __name__ == '__main__':
     main()
