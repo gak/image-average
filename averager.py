@@ -2,6 +2,9 @@
 
 import time
 import os
+from os.path import exists
+from os.path import join
+import string
 import sys
 import cPickle as pickle
 import json
@@ -11,49 +14,38 @@ from pprint import pprint
 from numpy import *
 from StringIO import StringIO
 from multiprocessing import *
+import unicodedata
 
 from PIL import Image
 
-
 class UrlCache(object):
+
     def __init__(self):
         self.lock = Lock()
         self.queue = Queue()
-        self.filename = 'url.cache'
-
-    def update(self):
-        try:
-            self.data = pickle.load(open(self.filename, 'rb'))
-        except IOError:
-            self.data = {}
-            print 'new cache'
-
-    def save(self):
-        pickle.dump(self.data, open(self.filename, 'wb'), -1)
+        self.validchars = "-_.() %s%s" % (string.ascii_letters, string.digits)
+        self.cachepath = 'cache'
+        if not exists(self.cachepath):
+            os.mkdir(self.cachepath)
 
     def get(self, url, skipcache=False):
 
-        self.lock.acquire()
-        self.update()
-        self.lock.release()
+        filename = self.clean_filename(url)
+        filename = join(self.cachepath, filename)
 
-        if url in self.data and not skipcache:
+        if exists(filename) and not skipcache:
             print url, 'cache hit'
-            return self.data[url]
+            return open(filename, 'rb').read()
+
         try:
             t = time.time()
             data = urllib2.urlopen(url, timeout=10).read()
             print url, 'done', time.time() - t
         except IOError:
-            data = None
+            data = ''
             print url, 'fail', time.time() - t
 
-        self.lock.acquire()
-        self.update()
-        self.data[url] = data
-        self.save()
-        self.lock.release()
-
+        open(filename, 'wb').write(data)
         return data
 
     def _get(self):
@@ -75,6 +67,18 @@ class UrlCache(object):
         for n, p in enumerate(workers):
             print 'waiting', count - n
             p.join()
+
+    def clean_filename(self, filename):
+        cleaned = unicodedata.normalize('NFKD', filename). \
+            encode('ASCII', 'ignore')
+        cleaned = ''.join(c for c in cleaned if c in self.validchars)
+
+        # make sure the filename isn't too long..
+        maxlen = 100
+        if len(cleaned) > maxlen:
+            cleaned = cleaned[:maxlen/2] + cleaned[-maxlen/2:]
+
+        return cleaned
 
 class ImageAverager(object):
 
@@ -116,7 +120,6 @@ class ImageAverager(object):
 
     def yahoo_search_single(self, query, *args, **kw):
         url = self.get_yahoo_url(query, **kw)
-        print url
         data = self.urlcache.get(url, skipcache=0)
         response = json.loads(data)
         images = response['ResultSet']['Result']
