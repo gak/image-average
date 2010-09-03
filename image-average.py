@@ -22,7 +22,7 @@ class UrlCache(object):
 
     def __init__(self):
         self.queue = Queue()
-        self.validchars = "-_.() %s%s" % (string.ascii_letters, string.digits)
+        self.validchars = "%s (-_.) %s" % (string.ascii_letters, string.digits)
         self.cachepath = 'cache'
         if not exists(self.cachepath):
             os.mkdir(self.cachepath)
